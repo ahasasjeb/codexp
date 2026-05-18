@@ -2,9 +2,14 @@ import { encryptForStorage, type StoredAuth } from "./auth-crypto";
 import { getRedis } from "./redis";
 
 const AUTH_INDEX_KEY = "codex-relay:auth:index";
+const USAGE_FAILURE_TTL_SECONDS = 24 * 60 * 60;
 
 export function storedAuthRedisKey(id: string) {
   return `codex-relay:auth:${id}`;
+}
+
+export function usageFailureRedisKey(id: string) {
+  return `codex-relay:auth:${id}:usage-failures`;
 }
 
 export function handshakeRedisKey(handshakeId: string) {
@@ -50,4 +55,24 @@ export async function saveWrappedAuth(
   await redis.sAdd(AUTH_INDEX_KEY, id);
 
   return record;
+}
+
+export async function recordUsageFailure(id: string) {
+  const redis = await getRedis();
+  const key = usageFailureRedisKey(id);
+  const count = await redis.incr(key);
+  if (count === 1) {
+    await redis.expire(key, USAGE_FAILURE_TTL_SECONDS);
+  }
+  return count;
+}
+
+export async function deleteWrappedAuth(id: string) {
+  const redis = await getRedis();
+  await redis
+    .multi()
+    .del(storedAuthRedisKey(id))
+    .sRem(AUTH_INDEX_KEY, id)
+    .del(usageFailureRedisKey(id))
+    .exec();
 }

@@ -21,6 +21,11 @@ returned once after a successful upload as the `api_key` inside
 `relay_server_key.json` content, and `one_way_key` is added alongside it for the
 extra auth wrapper.
 
+Usage lookups to `https://chatgpt.com/backend-api/wham/usage` are failure-counted
+per relay key fingerprint. If the same record fails twice within 24 hours, the
+server returns custom HTTP status `498` and deletes exactly that auth record, its
+index entry, and its usage-failure counter from Redis.
+
 ## Getting Started
 
 First, run the development server:

@@ -66,6 +66,13 @@ Content-Type: application/json
 }
 ```
 
+用量请求失败淘汰：
+
+- 仅适用于 `https://chatgpt.com/backend-api/wham/usage`
+- 同一个 `relay_api_key` 指纹在 24 小时内失败 2 次时，返回自定义 HTTP 状态码 `498`
+- 返回 `498` 前必须精准删除该指纹对应的 Redis auth 记录、索引集合成员和失败计数
+- 第 1 次失败仍按上游失败结果返回
+
 ## 3. 环境变量
 
 ```bash
@@ -140,6 +147,7 @@ export async function POST(req: NextRequest) {
 - 禁止转发 `Host`、`Content-Length`、`Connection`
 - 禁止记录 token、请求体、响应体
 - 仅部署 HTTPS
+- 用量请求 24 小时内失败 2 次后返回 `498` 并删除对应 Redis 记录
 
 ## 5. auth.json 上传协议
 
@@ -351,6 +359,8 @@ export function decryptFromStorage(
 - 无密钥访问 `/api/codex-relay` 返回 `401`
 - 非白名单目标返回 `400`
 - 转发响应与上游 status/body 一致
+- 用量请求同一 key 24 小时内第 2 次失败返回 `498`
+- 返回 `498` 时只删除当前 key 指纹对应的 Redis auth 记录
 - 浏览器上传包体不含 token 明文
 - 数据库不含 token 明文
 - 数据库不含 `relay_api_key` 明文

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRelayKey } from "@/lib/relay-auth";
+import { deleteWrappedAuth, recordUsageFailure } from "@/lib/auth-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ const allowedMethods = new Set([
   "HEAD",
   "OPTIONS",
 ]);
+const usageFailureStatus = 498;
+const usageFailureLimit = 2;
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
@@ -37,8 +40,25 @@ function parseHeaderLines(raw: string) {
   return headers;
 }
 
+function isUsageRequest(target: URL) {
+  return (
+    target.hostname === "chatgpt.com" &&
+    target.pathname === "/backend-api/wham/usage"
+  );
+}
+
+async function countUsageFailure(id: string) {
+  const count = await recordUsageFailure(id);
+  if (count >= usageFailureLimit) {
+    await deleteWrappedAuth(id);
+    return true;
+  }
+  return false;
+}
+
 export async function POST(req: NextRequest) {
-  if (!(await authenticateRelayKey(req))) {
+  const authenticated = await authenticateRelayKey(req);
+  if (!authenticated) {
     return jsonError("unauthorized", 401);
   }
 
@@ -71,12 +91,28 @@ export async function POST(req: NextRequest) {
     return jsonError("target_not_allowed", 400);
   }
 
-  const upstream = await fetch(target.toString(), {
-    method,
-    headers: parseHeaderLines(input.headers || ""),
-    body: method === "GET" || method === "HEAD" ? undefined : input.body || "",
-    cache: "no-store",
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(target.toString(), {
+      method,
+      headers: parseHeaderLines(input.headers || ""),
+      body: method === "GET" || method === "HEAD" ? undefined : input.body || "",
+      cache: "no-store",
+    });
+  } catch {
+    if (isUsageRequest(target) && (await countUsageFailure(authenticated.id))) {
+      return jsonError("usage_auth_removed", usageFailureStatus);
+    }
+    return jsonError("upstream_fetch_failed", 502);
+  }
+
+  if (
+    isUsageRequest(target) &&
+    !upstream.ok &&
+    (await countUsageFailure(authenticated.id))
+  ) {
+    return jsonError("usage_auth_removed", usageFailureStatus);
+  }
 
   return new NextResponse(await upstream.text(), {
     status: upstream.status,
