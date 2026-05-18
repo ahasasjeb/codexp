@@ -6,7 +6,6 @@ const storageAad = Buffer.from("codex-auth-json-storage-v1");
 
 export type HandshakeRecord = {
   handshakeId: string;
-  relayKeyId: string;
   serverPrivateJwk: JsonWebKey;
   clientPublicJwk: JsonWebKey;
   clientNonce: string;

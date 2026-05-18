@@ -12,11 +12,11 @@ REDIS_URL="redis://localhost:6379"
 ```
 
 Redis is used for short-lived handshakes and wrapped `auth.json` records. Stored
-auth records are keyed by the SHA-256 fingerprint of the relay key:
+auth records are keyed by the SHA-256 fingerprint of a server-generated relay key:
 `codex-relay:auth:<fingerprint>`. The relay key itself is not written to Redis.
-The first successful upload for a user-provided relay key creates that Redis
-record; later relay requests are authorized by the presence of the matching
-record in Redis.
+The relay key is returned once after a successful upload as
+`relay_server_key.json` content; later relay requests are authorized by the
+presence of the matching record in Redis.
 
 ## Getting Started
 

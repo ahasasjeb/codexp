@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   FileJson,
   KeyRound,
   LoaderCircle,
@@ -18,6 +19,14 @@ type HandshakeResponse = {
   serverPublicJwk: JsonWebKey;
   serverNonce: string;
   expiresAt: string;
+};
+
+type UploadResponse = {
+  ok: true;
+  id: string;
+  relay_api_key: string;
+  server_url: string;
+  updated_at: string;
 };
 
 const encoder = new TextEncoder();
@@ -85,17 +94,11 @@ function readFileWithProgress(
   });
 }
 
-async function postJson<T>(
-  path: string,
-  relayKey: string,
-  body: Record<string, unknown>,
-) {
+async function postJson<T>(path: string, body: Record<string, unknown>) {
   const response = await fetch(path, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${relayKey}`,
       "Content-Type": "application/json",
-      "X-Codex-Relay-Key": relayKey,
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -169,22 +172,38 @@ async function encryptAuthJson(
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [relayKey, setRelayKey] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState("等待选择文件");
   const [message, setMessage] = useState("");
+  const [relayConfig, setRelayConfig] = useState<UploadResponse | null>(null);
 
   const canUpload = useMemo(
-    () => Boolean(relayKey.trim() && selectedFile && state !== "working"),
-    [relayKey, selectedFile, state],
+    () => Boolean(selectedFile && state !== "working"),
+    [selectedFile, state],
   );
+
+  const relayServerKeyJson = useMemo(() => {
+    if (!relayConfig) {
+      return "";
+    }
+
+    return JSON.stringify(
+      {
+        server_url: relayConfig.server_url,
+        api_key: relayConfig.relay_api_key,
+      },
+      null,
+      2,
+    );
+  }, [relayConfig]);
 
   async function uploadSelectedFile(file: File) {
     setState("working");
     setProgress(0);
     setMessage("");
+    setRelayConfig(null);
 
     try {
       setPhase("上传文件");
@@ -206,11 +225,10 @@ export default function Home() {
 
       setPhase("建立安全握手");
       setProgress(68);
-      const handshake = await postJson<HandshakeResponse>(
-        "/api/auth/handshake",
-        relayKey.trim(),
-        { clientPublicJwk, clientNonce },
-      );
+      const handshake = await postJson<HandshakeResponse>("/api/auth/handshake", {
+        clientPublicJwk,
+        clientNonce,
+      });
 
       setPhase("浏览器端加密");
       setProgress(80);
@@ -223,7 +241,7 @@ export default function Home() {
 
       setPhase("提交密文");
       setProgress(92);
-      await postJson("/api/auth/upload", relayKey.trim(), {
+      const upload = await postJson<UploadResponse>("/api/auth/upload", {
         handshakeId: handshake.handshakeId,
         clientNonce,
         serverNonce: handshake.serverNonce,
@@ -234,7 +252,8 @@ export default function Home() {
       setPhase("完成");
       setProgress(100);
       setState("success");
-      setMessage("auth.json 已加密上传并写入 Redis。");
+      setRelayConfig(upload);
+      setMessage("auth.json 已加密上传，服务端已生成 relay key。");
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "上传失败");
@@ -247,6 +266,16 @@ export default function Home() {
     setProgress(0);
     setPhase(file ? "文件已选择" : "等待选择文件");
     setMessage("");
+    setRelayConfig(null);
+  }
+
+  async function copyRelayConfig() {
+    if (!relayServerKeyJson) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(relayServerKeyJson);
+    setMessage("relay_server_key.json 内容已复制。");
   }
 
   return (
@@ -273,21 +302,6 @@ export default function Home() {
         <section className="grid w-full min-w-0 max-w-full flex-1 grid-cols-1 items-center gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="w-full min-w-0 max-w-full rounded-lg border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="mb-6 grid gap-4">
-              <label className="grid min-w-0 gap-2">
-                <span className="flex items-center gap-2 text-sm font-medium text-zinc-700">
-                  <KeyRound size={16} aria-hidden />
-                  Relay API Key
-                </span>
-                <input
-                  value={relayKey}
-                  onChange={(event) => setRelayKey(event.target.value)}
-                  type="password"
-                  autoComplete="off"
-                  placeholder="输入服务器密钥"
-                  className="h-12 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-4 text-base text-zinc-950 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
-                />
-              </label>
-
               <input
                 ref={fileInputRef}
                 type="file"
@@ -351,6 +365,28 @@ export default function Home() {
               </div>
             ) : null}
 
+            {relayConfig ? (
+              <div className="mb-5 grid gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                    <KeyRound size={16} aria-hidden />
+                    服务端生成的 relay key
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyRelayConfig}
+                    className="flex h-9 shrink-0 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    <Copy size={15} aria-hidden />
+                    复制
+                  </button>
+                </div>
+                <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-md bg-white p-3 text-xs leading-5 text-zinc-700">
+                  {relayServerKeyJson}
+                </pre>
+              </div>
+            ) : null}
+
             <button
               type="button"
               disabled={!canUpload}
@@ -386,7 +422,7 @@ export default function Home() {
               </li>
               <li className="flex gap-3">
                 <StepBadge>4</StepBadge>
-                <span>服务端校验后用 Redis 保存包装记录。</span>
+                <span>服务端落库后生成 relay key 并返回。</span>
               </li>
             </ol>
           </aside>

@@ -7,7 +7,6 @@ import {
   type HandshakeRecord,
 } from "@/lib/auth-crypto";
 import { handshakeRedisKey } from "@/lib/auth-storage";
-import { getPresentedRelayKey } from "@/lib/relay-auth";
 import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -23,11 +22,6 @@ function handshakeTtlSeconds() {
 }
 
 export async function POST(req: NextRequest) {
-  const relayKey = getPresentedRelayKey(req);
-  if (!relayKey) {
-    return jsonError("unauthorized", 401);
-  }
-
   let input: {
     clientPublicJwk?: unknown;
     clientNonce?: unknown;
@@ -54,7 +48,6 @@ export async function POST(req: NextRequest) {
   const { publicJwk, privateJwk } = await generateServerKeyPair();
   const record: HandshakeRecord = {
     handshakeId,
-    relayKeyId: relayKey.id,
     serverPrivateJwk: privateJwk,
     clientPublicJwk: input.clientPublicJwk,
     clientNonce: input.clientNonce,

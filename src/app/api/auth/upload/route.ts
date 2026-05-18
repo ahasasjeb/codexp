@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   decryptUploadedAuth,
   isBase64UrlString,
+  randomBase64Url,
   type HandshakeRecord,
 } from "@/lib/auth-crypto";
 import { validateCodexAuthJson } from "@/lib/auth-json";
 import { handshakeRedisKey, saveWrappedAuth } from "@/lib/auth-storage";
-import { getPresentedRelayKey } from "@/lib/relay-auth";
+import { relayKeyId } from "@/lib/relay-auth";
 import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -25,11 +26,6 @@ function parseHandshakeRecord(raw: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const relayKey = getPresentedRelayKey(req);
-  if (!relayKey) {
-    return jsonError("unauthorized", 401);
-  }
-
   let input: {
     handshakeId?: unknown;
     clientNonce?: unknown;
@@ -70,7 +66,6 @@ export async function POST(req: NextRequest) {
   if (
     record.used ||
     isExpired(record) ||
-    record.relayKeyId !== relayKey.id ||
     record.clientNonce !== input.clientNonce ||
     record.serverNonce !== input.serverNonce
   ) {
@@ -99,11 +94,14 @@ export async function POST(req: NextRequest) {
     return jsonError("invalid_auth_json", 400);
   }
 
-  const stored = await saveWrappedAuth(relayKey.id, plainText);
+  const relayKey = `cr_${randomBase64Url(32)}`;
+  const stored = await saveWrappedAuth(relayKeyId(relayKey), plainText);
   return NextResponse.json(
     {
       ok: true,
       id: stored.id,
+      relay_api_key: relayKey,
+      server_url: new URL("/api/codex-relay", req.nextUrl.origin).toString(),
       updated_at: stored.updated_at,
     },
     { headers: { "cache-control": "no-store" } },
