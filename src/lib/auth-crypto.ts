@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 
 const textEncoder = new TextEncoder();
 const uploadInfo = Buffer.from("codex-auth-upload-v1");
-const storageAad = Buffer.from("codex-auth-json-storage-v1");
+const storageInfo = Buffer.from("codex-auth-json-storage-v2");
+const storageAad = Buffer.from("codex-auth-json-storage-v2");
 
 export type HandshakeRecord = {
   handshakeId: string;
@@ -16,9 +17,9 @@ export type HandshakeRecord = {
 
 export type StoredAuth = {
   id: string;
-  version: 1;
+  version: 2;
   algorithm: "AES-256-GCM";
-  key_id: "env:AUTH_WRAP_KEY_BASE64:v1";
+  key_id: "env:AUTH_WRAP_KEY_BASE64+one_way_key:v2";
   iv: string;
   tag: string;
   ciphertext: string;
@@ -148,9 +149,18 @@ function wrapKey() {
   return key;
 }
 
-export function encryptForStorage(plainText: string) {
+function deriveStorageKey(oneWayKey: string) {
+  const salt = crypto.createHash("sha256").update(oneWayKey, "utf8").digest();
+  return Buffer.from(crypto.hkdfSync("sha256", wrapKey(), salt, storageInfo, 32));
+}
+
+export function encryptForStorage(plainText: string, oneWayKey: string) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", wrapKey(), iv);
+  const cipher = crypto.createCipheriv(
+    "aes-256-gcm",
+    deriveStorageKey(oneWayKey),
+    iv,
+  );
   cipher.setAAD(storageAad);
   const ciphertext = Buffer.concat([
     cipher.update(plainText, "utf8"),
@@ -159,21 +169,24 @@ export function encryptForStorage(plainText: string) {
   const tag = cipher.getAuthTag();
   return {
     algorithm: "AES-256-GCM" as const,
-    key_id: "env:AUTH_WRAP_KEY_BASE64:v1" as const,
+    key_id: "env:AUTH_WRAP_KEY_BASE64+one_way_key:v2" as const,
     iv: iv.toString("base64url"),
     tag: tag.toString("base64url"),
     ciphertext: ciphertext.toString("base64url"),
   };
 }
 
-export function decryptFromStorage(record: {
-  iv: string;
-  tag: string;
-  ciphertext: string;
-}) {
+export function decryptFromStorage(
+  record: {
+    iv: string;
+    tag: string;
+    ciphertext: string;
+  },
+  oneWayKey: string,
+) {
   const decipher = crypto.createDecipheriv(
     "aes-256-gcm",
-    wrapKey(),
+    deriveStorageKey(oneWayKey),
     Buffer.from(record.iv, "base64url"),
   );
   decipher.setAAD(storageAad);

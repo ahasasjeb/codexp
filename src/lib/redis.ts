@@ -15,10 +15,7 @@ export async function getRedis() {
 
   if (!globalThis.codexRedisClient) {
     const client = createClient({ url });
-    client.on("error", (error) => {
-      const message = error instanceof Error ? error.message : "unknown error";
-      console.error(`Redis client error: ${message}`);
-    });
+    client.on("error", () => undefined);
     globalThis.codexRedisClient = client;
   }
 

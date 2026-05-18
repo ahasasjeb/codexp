@@ -95,12 +95,18 @@ export async function POST(req: NextRequest) {
   }
 
   const relayKey = `cr_${randomBase64Url(32)}`;
-  const stored = await saveWrappedAuth(relayKeyId(relayKey), plainText);
+  const oneWayKey = `ow_${randomBase64Url(32)}`;
+  const stored = await saveWrappedAuth(
+    relayKeyId(relayKey),
+    plainText,
+    oneWayKey,
+  );
   return NextResponse.json(
     {
       ok: true,
       id: stored.id,
       relay_api_key: relayKey,
+      one_way_key: oneWayKey,
       server_url: new URL("/api/codex-relay", req.nextUrl.origin).toString(),
       updated_at: stored.updated_at,
     },

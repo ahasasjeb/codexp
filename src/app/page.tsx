@@ -25,6 +25,7 @@ type UploadResponse = {
   ok: true;
   id: string;
   relay_api_key: string;
+  one_way_key: string;
   server_url: string;
   updated_at: string;
 };
@@ -193,6 +194,7 @@ export default function Home() {
       {
         server_url: relayConfig.server_url,
         api_key: relayConfig.relay_api_key,
+        one_way_key: relayConfig.one_way_key,
       },
       null,
       2,
@@ -253,7 +255,7 @@ export default function Home() {
       setProgress(100);
       setState("success");
       setRelayConfig(upload);
-      setMessage("auth.json 已加密上传，服务端已生成 relay key。");
+      setMessage("auth.json 已加密上传，服务端已生成 relay key 和 one_way_key。");
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "上传失败");
@@ -370,7 +372,7 @@ export default function Home() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
                     <KeyRound size={16} aria-hidden />
-                    服务端生成的 relay key
+                    服务端生成的 relay key 与 one_way_key
                   </span>
                   <button
                     type="button"
@@ -422,7 +424,7 @@ export default function Home() {
               </li>
               <li className="flex gap-3">
                 <StepBadge>4</StepBadge>
-                <span>服务端落库后生成 relay key 并返回。</span>
+                <span>服务端落库后生成 relay key，并额外返回 one_way_key。</span>
               </li>
             </ol>
           </aside>

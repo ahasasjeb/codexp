@@ -24,15 +24,19 @@ function readCreatedAt(raw: string | null, fallback: string) {
   }
 }
 
-export async function saveWrappedAuth(id: string, plainText: string) {
+export async function saveWrappedAuth(
+  id: string,
+  plainText: string,
+  oneWayKey: string,
+) {
   const redis = await getRedis();
   const now = new Date().toISOString();
   const key = storedAuthRedisKey(id);
   const existing = await redis.get(key);
-  const encrypted = encryptForStorage(plainText);
+  const encrypted = encryptForStorage(plainText, oneWayKey);
   const record: StoredAuth = {
     id,
-    version: 1,
+    version: 2,
     algorithm: encrypted.algorithm,
     key_id: encrypted.key_id,
     iv: encrypted.iv,
