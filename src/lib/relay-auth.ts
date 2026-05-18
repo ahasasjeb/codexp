@@ -7,10 +7,6 @@ export type AuthenticatedRelayKey = {
   id: string;
 };
 
-export type PresentedRelayKey = {
-  id: string;
-};
-
 function extractCandidateKeys(req: NextRequest) {
   const keys: string[] = [];
   const authorization = req.headers.get("authorization") || "";
@@ -38,11 +34,6 @@ async function isRedisRelayKey(id: string) {
 
   const redis = await getRedis();
   return (await redis.exists(storedAuthRedisKey(id))) > 0;
-}
-
-export function getPresentedRelayKey(req: NextRequest): PresentedRelayKey | null {
-  const [candidate] = extractCandidateKeys(req);
-  return candidate ? { id: relayKeyId(candidate) } : null;
 }
 
 export async function authenticateRelayKey(
