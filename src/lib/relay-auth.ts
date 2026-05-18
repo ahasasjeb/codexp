@@ -1,19 +1,15 @@
 import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
+import { storedAuthRedisKey } from "./auth-storage";
 import { getRedis } from "./redis";
-
-export const RELAY_KEY_SET = "codex-relay:api-keys";
 
 export type AuthenticatedRelayKey = {
   id: string;
 };
 
-function configuredRelayKeys() {
-  return (process.env.CODEX_RELAY_API_KEY || "")
-    .split(/[\s,]+/)
-    .map((key) => key.trim())
-    .filter(Boolean);
-}
+export type PresentedRelayKey = {
+  id: string;
+};
 
 function extractCandidateKeys(req: NextRequest) {
   const keys: string[] = [];
@@ -35,22 +31,18 @@ export function relayKeyId(key: string) {
   return crypto.createHash("sha256").update(key, "utf8").digest("hex");
 }
 
-function timingSafeEqualString(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return (
-    leftBuffer.length === rightBuffer.length &&
-    crypto.timingSafeEqual(leftBuffer, rightBuffer)
-  );
-}
-
 async function isRedisRelayKey(id: string) {
   if (!process.env.REDIS_URL) {
     return false;
   }
 
   const redis = await getRedis();
-  return redis.sIsMember(RELAY_KEY_SET, id);
+  return (await redis.exists(storedAuthRedisKey(id))) > 0;
+}
+
+export function getPresentedRelayKey(req: NextRequest): PresentedRelayKey | null {
+  const [candidate] = extractCandidateKeys(req);
+  return candidate ? { id: relayKeyId(candidate) } : null;
 }
 
 export async function authenticateRelayKey(
@@ -61,13 +53,8 @@ export async function authenticateRelayKey(
     return null;
   }
 
-  const envKeyIds = configuredRelayKeys().map(relayKeyId);
   for (const candidate of candidates) {
     const id = relayKeyId(candidate);
-    if (envKeyIds.some((expectedId) => timingSafeEqualString(id, expectedId))) {
-      return { id };
-    }
-
     if (await isRedisRelayKey(id)) {
       return { id };
     }

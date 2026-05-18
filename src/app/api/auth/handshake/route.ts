@@ -7,7 +7,7 @@ import {
   type HandshakeRecord,
 } from "@/lib/auth-crypto";
 import { handshakeRedisKey } from "@/lib/auth-storage";
-import { authenticateRelayKey } from "@/lib/relay-auth";
+import { getPresentedRelayKey } from "@/lib/relay-auth";
 import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ function handshakeTtlSeconds() {
 }
 
 export async function POST(req: NextRequest) {
-  const relayKey = await authenticateRelayKey(req);
+  const relayKey = getPresentedRelayKey(req);
   if (!relayKey) {
     return jsonError("unauthorized", 401);
   }

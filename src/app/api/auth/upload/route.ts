@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth-crypto";
 import { validateCodexAuthJson } from "@/lib/auth-json";
 import { handshakeRedisKey, saveWrappedAuth } from "@/lib/auth-storage";
-import { authenticateRelayKey } from "@/lib/relay-auth";
+import { getPresentedRelayKey } from "@/lib/relay-auth";
 import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ function parseHandshakeRecord(raw: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const relayKey = await authenticateRelayKey(req);
+  const relayKey = getPresentedRelayKey(req);
   if (!relayKey) {
     return jsonError("unauthorized", 401);
   }
